@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -11,10 +11,9 @@ class QueueEntry:
 
 
 class MatchmakingService:
-    """Safe abstraction for 1v1 queue and match creation.
+    """Manual-match fallback for 1v1 matches.
 
-    The current implementation intentionally uses a manual fallback and does not
-    fabricate unsupported XPLAY.GG automated lobby endpoints.
+    This intentionally avoids inventing unsupported XPLAY.GG automated lobby creation.
     """
 
     def __init__(self):
@@ -24,7 +23,7 @@ class MatchmakingService:
     async def join_queue(self, member_id: int) -> dict:
         if member_id in self.queue:
             return {"status": "already_queued", "member_id": member_id}
-        self.queue[member_id] = QueueEntry(member_id=member_id, joined_at=0)
+        self.queue[member_id] = QueueEntry(member_id=member_id, joined_at=0.0)
         return {"status": "queued", "member_id": member_id}
 
     async def leave_queue(self, member_id: int) -> dict:

@@ -5,8 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from app.config import settings
-from app.discord.views.main_menu import MainMenuView
-from app.discord.views.profile_view import ProfileView
+from app.discord.views.main_menu import MainMenuView, ProfileView
 from app.services.leaderboard_service import generate_leaderboard_message
 from app.services.profile_service import build_profile_message
 from app.services.premier_service import get_rating_bracket
@@ -19,11 +18,7 @@ class CS2Commands(commands.Cog):
 
     @app_commands.command(name="menu", description="Open the main CS2 community dashboard")
     async def menu(self, interaction: discord.Interaction):
-        await interaction.response.send_message(
-            "CS2 Community Dashboard",
-            view=MainMenuView(),
-            ephemeral=True,
-        )
+        await interaction.response.send_message("CS2 Community Dashboard", view=MainMenuView(), ephemeral=True)
 
     @app_commands.command(name="profile", description="View your player profile")
     async def profile(self, interaction: discord.Interaction):
@@ -46,7 +41,7 @@ class CS2Commands(commands.Cog):
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.send_message(generate_leaderboard_message(), ephemeral=True)
 
-    @app_commands.command(name="verify", description="Begin Steam account verification")
+    @app_commands.command(name="verify", description="Begin Steam verification")
     async def verify(self, interaction: discord.Interaction):
         service = SteamOpenIDService()
         auth_url = service.build_auth_url(
@@ -55,8 +50,7 @@ class CS2Commands(commands.Cog):
             state=f"verify:{interaction.user.id}",
         )
         await interaction.response.send_message(
-            "Steam verification is required to link your account securely.\n"
-            + auth_url,
+            "Steam verification is required to link your account securely.\n" + auth_url,
             ephemeral=True,
         )
 

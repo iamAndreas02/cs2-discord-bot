@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 
 class SteamOpenIDService:
-    """Official Steam OpenID verification flow helper."""
+    """Official Steam OpenID verification helper."""
 
     def build_auth_url(self, *, realm: str, return_to: str, state: str) -> str:
         params = {
@@ -19,7 +19,6 @@ class SteamOpenIDService:
         return "https://steamcommunity.com/openid/login?" + urlencode(params)
 
     async def verify_openid_response(self, payload: dict) -> str | None:
-        """Return the 64-bit Steam ID when the response is valid, else None."""
         claimed_id = payload.get("openid.claimed_id") or payload.get("claimed_id")
         if not claimed_id:
             return None

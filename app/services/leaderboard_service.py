@@ -14,7 +14,5 @@ def get_mock_premier_leaderboard() -> list[dict]:
 def generate_leaderboard_message() -> str:
     lines = ["Premier leaderboard", "------------------"]
     for entry in get_mock_premier_leaderboard():
-        lines.append(
-            f"#{entry['rank']} {entry['player']} — {entry['rating']} ({entry['bracket']})"
-        )
+        lines.append(f"#{entry['rank']} {entry['player']} — {entry['rating']} ({entry['bracket']})")
     return "\n".join(lines)
