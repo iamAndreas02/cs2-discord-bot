@@ -10,6 +10,9 @@ from app.services.leaderboard_service import generate_leaderboard_message
 from app.services.profile_service import build_profile_message
 from app.services.premier_service import get_rating_bracket
 from app.services.steam_service import SteamOpenIDService
+from app.services.verification_service import VerificationService
+
+verification_service = VerificationService()
 
 
 class CS2Commands(commands.Cog):
@@ -41,8 +44,14 @@ class CS2Commands(commands.Cog):
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.send_message(generate_leaderboard_message(), ephemeral=True)
 
-    @app_commands.command(name="verify", description="Begin Steam verification")
+    @app_commands.command(name="verify", description="Begin Steam account verification")
     async def verify(self, interaction: discord.Interaction):
+        ok, message = verification_service.can_attempt(interaction.user.id, settings.verification_cooldown_seconds)
+        if not ok:
+            await interaction.response.send_message(message, ephemeral=True)
+            return
+
+        verification_service.register_attempt(interaction.user.id)
         service = SteamOpenIDService()
         auth_url = service.build_auth_url(
             realm=settings.steam_openid_realm,
@@ -58,6 +67,20 @@ class CS2Commands(commands.Cog):
     async def refresh_premier(self, interaction: discord.Interaction):
         await interaction.response.send_message(
             "Refresh request received. This implementation uses a provider-first update flow and reports unavailable data safely.",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="join-queue", description="Join the 1v1 matchmaking queue")
+    async def join_queue(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            f"{interaction.user.display_name} has entered the 1v1 queue (manual fallback mode).",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="leave-queue", description="Leave the 1v1 matchmaking queue")
+    async def leave_queue(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            f"{interaction.user.display_name} has left the 1v1 queue.",
             ephemeral=True,
         )
 
