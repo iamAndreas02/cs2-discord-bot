@@ -1,35 +1,53 @@
 from __future__ import annotations
 
-import httpx
+from app.config import settings
+
+PREMIER_BRACKETS = [
+    ("Unranked / rating unavailable", None, None),
+    ("0–5,000", 0, 5000),
+    ("5,001–10,000", 5001, 10000),
+    ("10,001–15,000", 10001, 15000),
+    ("15,001–20,000", 15001, 20000),
+    ("20,001–25,000", 20001, 25000),
+    ("25,001–30,000", 25001, 30000),
+    ("30,001+", 30001, None),
+]
 
 
-class FaceitService:
-    def __init__(self, api_key: str | None):
-        self.api_key = api_key
+def get_rating_bracket(rating: int | None) -> tuple[str, int | None, int | None]:
+    if rating is None:
+        return PREMIER_BRACKETS[0]
 
-    async def get_player(self, faceit_id: str) -> dict | None:
-        if not self.api_key:
-            raise RuntimeError("FACEIT_API_KEY not configured")
+    for label, min_value, max_value in PREMIER_BRACKETS[1:]:
+        if max_value is None:
+            if rating >= min_value:
+                return label, min_value, max_value
+        elif min_value <= rating <= max_value:
+            return label, min_value, max_value
 
-        url = f"https://open.faceit.com/data/v4/players/{faceit_id}"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code != 200:
-                return None
-            return resp.json()
+    return PREMIER_BRACKETS[0]
 
-    async def get_player_by_name(self, nickname: str) -> dict | None:
-        if not self.api_key:
-            raise RuntimeError("FACEIT_API_KEY not configured")
 
-        url = "https://open.faceit.com/data/v4/search/players"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        params = {"nickname": nickname}
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url, headers=headers, params=params)
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            items = data.get("items") or []
-            return items[0] if items else None
+def bracket_to_role_id(rating: int | None) -> int | None:
+    bracket_name, _, _ = get_rating_bracket(rating)
+    if bracket_name == "Unranked / rating unavailable":
+        return None
+
+    mapping = settings.rank_role_brackets
+    normalized = {
+        "0-5000": 5000,
+        "5001-10000": 10000,
+        "10001-15000": 15000,
+        "15001-20000": 20000,
+        "20001-25000": 25000,
+        "25001-30000": 30000,
+        "30001+": 30001,
+    }
+
+    role_value = normalized.get(bracket_name.replace("–", "-").replace("+", "+"), 0)
+    return role_value
+
+
+def get_role_name_for_rating(rating: int | None) -> str:
+    label, _, _ = get_rating_bracket(rating)
+    return label

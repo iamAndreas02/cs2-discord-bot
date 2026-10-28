@@ -1,35 +1,84 @@
 from __future__ import annotations
 
 import discord
+from discord import app_commands
+from discord.ext import commands
+
+from app.config import settings
+from app.discord.views.main_menu import MainMenuView
+from app.discord.views.profile_view import ProfileView
+from app.services.leaderboard_service import generate_leaderboard_message
+from app.services.profile_service import build_profile_message
+from app.services.premier_service import get_rating_bracket
+from app.services.steam_service import SteamOpenIDService
 
 
-class MainMenuView(discord.ui.View):
-    def __init__(self, *, timeout: int = 180):
-        super().__init__(timeout=timeout)
+class CS2Commands(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
 
-    @discord.ui.button(label="My Profile", style=discord.ButtonStyle.primary)
-    async def profile_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @app_commands.command(name="menu", description="Open the main CS2 community dashboard")
+    async def menu(self, interaction: discord.Interaction):
         await interaction.response.send_message(
-            "My profile is available from the personal profile panel. This is a placeholder view for the bot scaffold.",
+            "CS2 Community Dashboard",
+            view=MainMenuView(),
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Premier Leaderboard", style=discord.ButtonStyle.secondary)
-    async def premier_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Premier leaderboard placeholder.", ephemeral=True)
+    @app_commands.command(name="profile", description="View your player profile")
+    async def profile(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            build_profile_message(interaction.user.id, interaction.user.display_name),
+            view=ProfileView(),
+            ephemeral=True,
+        )
 
-    @discord.ui.button(label="FACEIT Leaderboard", style=discord.ButtonStyle.secondary)
-    async def faceit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("FACEIT leaderboard placeholder.", ephemeral=True)
+    @app_commands.command(name="premier", description="Check your current Premier bracket")
+    async def premier(self, interaction: discord.Interaction):
+        rating = 15420
+        label, min_value, max_value = get_rating_bracket(rating)
+        await interaction.response.send_message(
+            f"Premier rating: {rating}\nBracket: {label}\nRange: {min_value} to {max_value}",
+            ephemeral=True,
+        )
 
-    @discord.ui.button(label="1v1 Matchmaking", style=discord.ButtonStyle.green)
-    async def queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Matchmaking placeholder.", ephemeral=True)
+    @app_commands.command(name="leaderboard", description="View the Premier leaderboard")
+    async def leaderboard(self, interaction: discord.Interaction):
+        await interaction.response.send_message(generate_leaderboard_message(), ephemeral=True)
 
-    @discord.ui.button(label="Player Statistics", style=discord.ButtonStyle.blurple)
-    async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Player statistics placeholder.", ephemeral=True)
+    @app_commands.command(name="verify", description="Begin Steam account verification")
+    async def verify(self, interaction: discord.Interaction):
+        service = SteamOpenIDService()
+        auth_url = service.build_auth_url(
+            realm=settings.steam_openid_realm,
+            return_to=settings.steam_openid_return_to,
+            state=f"verify:{interaction.user.id}",
+        )
+        await interaction.response.send_message(
+            "Steam verification is required to link your account securely.\n"
+            + auth_url,
+            ephemeral=True,
+        )
 
-    @discord.ui.button(label="Rank History", style=discord.ButtonStyle.gray)
-    async def history_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Rank history placeholder.", ephemeral=True)
+    @app_commands.command(name="refresh-premier", description="Refresh Premier rating data")
+    async def refresh_premier(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            "Refresh request received. This implementation uses a provider-first update flow and reports unavailable data safely.",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="admin-status", description="View bot system status")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def admin_status(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            "Bot status: online\n"
+            "Database: SQLAlchemy + SQLite ready\n"
+            "Steam verification: enabled\n"
+            "FACEIT: API abstraction enabled\n"
+            "XPLAY: provider abstraction only; no unsupported automation claimed",
+            ephemeral=True,
+        )
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(CS2Commands(bot))

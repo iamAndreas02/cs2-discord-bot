@@ -1,36 +1,54 @@
 from __future__ import annotations
 
-from urllib.parse import urlencode
+import httpx
 
 
-class SteamOpenIDService:
-    """Handles the official Steam OpenID verification flow.
+class FaceitService:
+    """Thin wrapper around official FACEIT API endpoints."""
 
-    This service intentionally does not claim to provide Premier rating data from Steam.
-    It only verifies account ownership via the official OpenID mechanism.
-    """
+    def __init__(self, api_key: str | None):
+        self.api_key = api_key
 
-    def build_auth_url(self, *, realm: str, return_to: str, state: str) -> str:
-        params = {
-            "openid.ns": "http://specs.openid.net/auth/2.0",
-            "openid.mode": "checkid_setup",
-            "openid.return_to": return_to,
-            "openid.realm": realm,
-            "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
-            "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
-            "state": state,
+    async def get_player(self, faceit_id: str) -> dict | None:
+        if not self.api_key:
+            raise RuntimeError("FACEIT_API_KEY not configured")
+
+        url = f"https://open.faceit.com/data/v4/players/{faceit_id}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
+
+    async def get_player_by_name(self, nickname: str) -> dict | None:
+        if not self.api_key:
+            raise RuntimeError("FACEIT_API_KEY not configured")
+
+        url = "https://open.faceit.com/data/v4/search/players"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        params = {"nickname": nickname}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            items = data.get("items") or []
+            return items[0] if items else None
+
+    @staticmethod
+    def get_summary(player_payload: dict | None) -> dict:
+        if not player_payload:
+            return {
+                "status": "unlinked",
+                "level": None,
+                "elo": None,
+                "nickname": None,
+            }
+
+        return {
+            "status": "linked",
+            "level": player_payload.get("games", {}).get("cs2", {}).get("skill_level"),
+            "elo": player_payload.get("games", {}).get("cs2", {}).get("faceit_elo"),
+            "nickname": player_payload.get("nickname"),
         }
-        return "https://steamcommunity.com/openid/login?" + urlencode(params)
-
-    async def verify_openid_response(self, payload: dict) -> str | None:
-        """Validate the callback and return a 64-bit Steam ID if valid.
-
-        In production, this should validate the OpenID response against Steam's endpoint.
-        This placeholder is intentionally minimal and safe.
-        """
-        claimed_id = payload.get("openid.claimed_id") or payload.get("claimed_id")
-        if not claimed_id:
-            return None
-        if "steamcommunity.com/openid/id/" not in claimed_id:
-            return None
-        return claimed_id.rsplit("/", 1)[-1]
