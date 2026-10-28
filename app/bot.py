@@ -1,40 +1,43 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+
 import discord
-from discord import app_commands
 from discord.ext import commands
 
-from app.discord.views.menu import MainMenuView
+from app.config import settings
+from app.database import init_db
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("cs2bot")
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.message_content = True
 
 
-class DiscordCommands(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+class CS2Bot(commands.Bot):
+    def __init__(self) -> None:
+        super().__init__(command_prefix="!", intents=intents, help_command=None)
 
-    @app_commands.command(name="menu", description="Open the main CS2 community dashboard")
-    async def menu(self, interaction: discord.Interaction):
-        await interaction.response.send_message(
-            "CS2 Community Dashboard",
-            view=MainMenuView(),
-            ephemeral=True,
-        )
+    async def setup_hook(self) -> None:
+        await self.load_extension("app.discord.commands")
+        try:
+            await self.tree.sync()
+        except Exception:
+            logger.exception("Could not sync application commands")
 
-    @app_commands.command(name="verify", description="Begin Steam verification")
-    async def verify(self, interaction: discord.Interaction):
-        await interaction.response.send_message(
-            "Steam verification flow is available through the official OpenID flow. Connect the provider in production.",
-            ephemeral=True,
-        )
-
-    @app_commands.command(name="refresh-premier", description="Refresh the member Premier rating")
-    async def refresh_premier(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Premier refresh hook placeholder.", ephemeral=True)
-
-    @app_commands.command(name="admin-status", description="View bot system status")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def admin_status(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Bot status: running. Integrations: Steam/OIDC, FACEIT API, XPLAY provider abstraction ready.", ephemeral=True)
+    async def on_ready(self) -> None:
+        logger.info("Logged in as %s (%s)", self.user, self.user.id)
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(DiscordCommands(bot))
+async def main() -> None:
+    await init_db()
+    bot = CS2Bot()
+    await bot.start(settings.discord_token)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
