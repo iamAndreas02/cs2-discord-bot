@@ -1,36 +1,65 @@
 from __future__ import annotations
 
-
-def get_bracket_for_rating(rating: int | None) -> tuple[str, int | None, int | None]:
-    if rating is None:
-        return ("Unranked / rating unavailable", None, None)
-    ranges = [
-        ("0–5,000", 0, 5000),
-        ("5,001–10,000", 5001, 10000),
-        ("10,001–15,000", 10001, 15000),
-        ("15,001–20,000", 15001, 20000),
-        ("20,001–25,000", 20001, 25000),
-        ("25,001–30,000", 25001, 30000),
-        ("30,001+", 30001, None),
-    ]
-    for label, low, high in ranges:
-        if high is None:
-            if rating >= low:
-                return label, low, high
-        elif low <= rating <= high:
-            return label, low, high
-    return ("Unranked / rating unavailable", None, None)
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 
-def determine_role_from_rating(rating: int | None) -> str:
-    bracket, _, _ = get_bracket_for_rating(rating)
-    return bracket
+@dataclass
+class VerificationRecord:
+    member_id: int
+    steam_id: str | None = None
+    verified: bool = False
+    verified_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    attempts: int = 0
 
 
-def build_rank_history(entries: list[dict]) -> str:
-    if not entries:
-        return "No historical Premier rating data is available yet."
-    lines = ["Premier rank history", "--------------------"]
-    for e in entries[:10]:
-        lines.append(f"{e.get('captured_at', 'unknown')} :: {e.get('rating', 'N/A')} ({e.get('bracket', 'Unknown')})")
-    return "\n".join(lines)
+class VerificationService:
+    """In-memory verification state with cooldown enforcement and ownership tracking."""
+
+    def __init__(self):
+        self.records: dict[int, VerificationRecord] = {}
+
+    def get_record(self, member_id: int) -> VerificationRecord:
+        record = self.records.get(member_id)
+        if record is None:
+            record = VerificationRecord(member_id=member_id)
+            self.records[member_id] = record
+        return record
+
+    def set_steam_id(self, member_id: int, steam_id: str) -> VerificationRecord:
+        record = self.get_record(member_id)
+        record.steam_id = steam_id
+        record.verified = True
+        record.verified_at = datetime.utcnow()
+        return record
+
+    def can_attempt(self, member_id: int, cooldown_seconds: int = 180) -> tuple[bool, str]:
+        record = self.get_record(member_id)
+        now = datetime.utcnow()
+        if record.last_attempt_at and now - record.last_attempt_at < timedelta(seconds=cooldown_seconds):
+            return False, "Verification has a cooldown. Please wait before trying again."
+        return True, "OK"
+
+    def register_attempt(self, member_id: int) -> VerificationRecord:
+        record = self.get_record(member_id)
+        record.attempts += 1
+        record.last_attempt_at = datetime.utcnow()
+        return record
+
+    def is_verified(self, member_id: int) -> bool:
+        return self.get_record(member_id).verified
+
+    def revoke_verification(self, member_id: int) -> VerificationRecord:
+        record = self.get_record(member_id)
+        record.verified = False
+        record.steam_id = None
+        record.verified_at = None
+        return record
+
+    def mark_verified(self, member_id: int, steam_id: str) -> VerificationRecord:
+        record = self.get_record(member_id)
+        record.steam_id = steam_id
+        record.verified = True
+        record.verified_at = datetime.utcnow()
+        return record

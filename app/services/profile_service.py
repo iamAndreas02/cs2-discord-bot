@@ -1,24 +1,23 @@
 from __future__ import annotations
 
-
-def build_profile_message(member_id: int, display_name: str) -> str:
-    return (
-        f"Player profile for {display_name}\n"
-        "-----------------------------------\n"
-        f"Discord ID: {member_id}\n"
-        "Steam: Not linked\n"
-        "Premier rating: Unavailable\n"
-        "Premier bracket: Unranked / rating unavailable\n"
-        "FACEIT: Not linked\n"
-        "Verification status: Pending\n"
-        "Head-to-head: No recorded matches yet\n"
-        "Last refresh: Never\n"
-    )
+import discord
 
 
-def build_h2h_summary() -> str:
-    return (
-        "Head-to-Head\n"
-        "------------\n"
-        "No opponents recorded yet. Complete at least one verified 1v1 match to start tracking rivalry history."
-    )
+class ProfileChannelService:
+    """Creates and maintains the persistent profile channel."""
+
+    async def ensure_channel(self, guild: discord.Guild, channel_name: str = "🎮・my-profile") -> discord.TextChannel:
+        channel = discord.utils.get(guild.text_channels, name=channel_name)
+        if channel is None:
+            channel = await guild.create_text_channel(channel_name)
+        everyone = guild.default_role
+        await channel.set_permissions(everyone, send_messages=False, read_messages=True, add_reactions=True)
+        return channel
+
+    async def ensure_profile_message(self, channel: discord.TextChannel, content: str = "CS2 Profile") -> discord.Message | None:
+        if not channel:
+            return None
+        async for message in channel.history(limit=20):
+            if message.author == channel.guild.me and "CS2 Profile" in message.content:
+                return message
+        return await channel.send(content)

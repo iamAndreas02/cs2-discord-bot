@@ -1,29 +1,69 @@
 from __future__ import annotations
 
-import discord
+from app.config import settings
+
+BRACKET_TO_ROLE_ID = {
+    "0-5000": 5000,
+    "5001-10000": 10000,
+    "10001-15000": 15000,
+    "15001-20000": 20000,
+    "20001-25000": 25000,
+    "25001-30000": 30000,
+    "30001+": 30001,
+}
 
 
-class ProfileChannelService:
-    """Creates and maintains the persistent profile channel."""
+def get_bracket_for_rating(rating: int | None) -> tuple[str, int | None, int | None]:
+    if rating is None:
+        return ("Unranked / rating unavailable", None, None)
+    ranges = [
+        ("0–5,000", 0, 5000),
+        ("5,001–10,000", 5001, 10000),
+        ("10,001–15,000", 10001, 15000),
+        ("15,001–20,000", 15001, 20000),
+        ("20,001–25,000", 20001, 25000),
+        ("25,001–30,000", 25001, 30000),
+        ("30,001+", 30001, None),
+    ]
+    for label, low, high in ranges:
+        if high is None:
+            if rating >= low:
+                return label, low, high
+        elif low <= rating <= high:
+            return label, low, high
+    return ("Unranked / rating unavailable", None, None)
 
-    async def ensure_channel(self, guild: discord.Guild, channel_name: str = "🎮・my-profile") -> discord.TextChannel:
-        channel = discord.utils.get(guild.text_channels, name=channel_name)
-        if channel is None:
-            channel = await guild.create_text_channel(channel_name)
 
-        everyone = guild.default_role
-        overwrites = {
-            everyone: discord.PermissionOverwrite(send_messages=False, read_messages=True, add_reactions=True),
-            guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True, manage_messages=True),
-        }
-        if channel.overwrites_for(everyone) != overwrites.get(everyone):
-            await channel.set_permissions(everyone, send_messages=False, read_messages=True, add_reactions=True)
-        return channel
+def determine_role_from_rating(rating: int | None) -> str:
+    bracket, _, _ = get_bracket_for_rating(rating)
+    return bracket
 
-    async def ensure_profile_message(self, channel: discord.TextChannel, content: str = "CS2 Profile") -> discord.Message | None:
-        if not channel:
-            return None
-        async for msg in channel.history(limit=20):
-            if msg.author == channel.guild.me and "CS2 Profile" in msg.content:
-                return msg
-        return await channel.send(content)
+
+def build_rank_history(entries: list[dict]) -> str:
+    if not entries:
+        return "No historical Premier rating data is available yet."
+    lines = ["Premier rank history", "--------------------"]
+    for entry in entries[:10]:
+        lines.append(f"{entry.get('captured_at', 'unknown')} :: {entry.get('rating', 'N/A')} ({entry.get('bracket', 'Unknown')})")
+    return "\n".join(lines)
+
+
+def get_role_for_bracket(bracket: str) -> int | None:
+    normalized = bracket.replace("–", "-")
+    return BRACKET_TO_ROLE_ID.get(normalized, None)
+
+
+def sync_member_roles(member, guild, rating: int | None = None) -> None:
+    if rating is None:
+        return
+    bracket, _, _ = get_bracket_for_rating(rating)
+    role_id = get_role_for_bracket(bracket)
+    if role_id is None:
+        return
+    role = guild.get_role(role_id)
+    if role is not None:
+        try:
+            if role not in member.roles:
+                guild.get_member(member.id).add_roles(role)
+        except Exception:
+            pass
